@@ -1,41 +1,33 @@
-import mongoose from 'mongoose';
+import fs from 'fs';
 import nodemailer from 'nodemailer';
 
 /* ------------------------------------------
-   ✅ MongoDB Connection (Dynamic)
+   ✅ Load & Save Helpers
 ------------------------------------------ */
-const connectDB = async (mongoUri) => {
+const loadUsers = () => {
   try {
-    await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log('✅ MongoDB Connected');
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
+    const data = fs.readFileSync('./User.json', 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
   }
 };
 
+const saveUsers = (users) => {
+  fs.writeFileSync('./User.json', JSON.stringify(users, null, 2));
+};
+
 /* ------------------------------------------
-   ✅ Schema & Model
+   ✅ Clean Expired OTPs
 ------------------------------------------ */
-
-// Email Verification Schema
-const emailSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  otp: { type: String, required: true },
-  otpExpiresAt: { type: Date, required: true },
-});
-
-const EmailVerification = mongoose.model("EmailVerification", emailSchema);
-
-// Verified Email Schema
-const verifiedEmailSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  verifiedAt: { type: Date, default: Date.now },
-});
-
-const VerifiedEmail = mongoose.model("VerifiedEmail", verifiedEmailSchema);
+const cleanExpiredUsers = () => {
+  const users = loadUsers();
+  const filteredUsers = users.filter(user => Date.now() < user.expiresAt);
+  if (filteredUsers.length !== users.length) {
+    saveUsers(filteredUsers);
+  }
+  return filteredUsers;
+};
 
 /* ------------------------------------------
    ✅ OTP Generator
@@ -49,7 +41,7 @@ const generateOTP = (length = 6) => {
 };
 
 /* ------------------------------------------
-   ✅ Email Sender
+   ✅ Email Sender Setup
 ------------------------------------------ */
 let hostEmail = "";
 let hostPassword = "";
@@ -93,54 +85,62 @@ const sendOTPEmail = async ({ to, otp, htmlMessage }) => {
    ✅ Send OTP
 ------------------------------------------ */
 const sendOTP = async (email) => {
+  let users = cleanExpiredUsers();
   const otp = generateOTP();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  const expiresAt = Date.now() + 5 * 60 * 1000;
+
+  const existing = users.find(u => u.email === email);
+  if (existing) {
+    existing.otp = otp;
+    existing.expiresAt = expiresAt;
+  } else {
+    users.push({ id: users.length, email, otp, expiresAt });
+  }
+
+  saveUsers(users);
 
   try {
-    await EmailVerification.findOneAndUpdate(
-      { email },
-      { otp, otpExpiresAt: expiresAt },
-      { upsert: true, new: true }
-    );
-
     await sendOTPEmail({ to: email, otp });
-    return { success: true, message: "OTP sent", otp };
+    console.log(`📨 OTP Sent to ${email}: ${otp}`);
+    return true ;
   } catch (err) {
     console.error("❌ Failed to send OTP:", err.message);
-    return { success: false, message: "OTP send failed" };
+    return false;
   }
 };
-
 /* ------------------------------------------
-   ✅ Resend OTP
+   ✅ Check OTP
 ------------------------------------------ */
-const resendOTP = async (email) => {
-  return await sendOTP(email);
-};
+const checkOTP = (email, otp) => {
+  let users = cleanExpiredUsers();
+  const userIndex = users.findIndex(u => u.email === email);
 
-/* ------------------------------------------
-   ✅ Check OTP and Store Verified Email
------------------------------------------- */
-const checkOTP = async (email, otp) => {
-  const record = await EmailVerification.findOne({ email });
-
-  if (!record) return { success: false, message: "Email not found" };
-  if (record.otp !== otp) return { success: false, message: "Invalid OTP" };
-  if (record.otpExpiresAt < new Date()) return { success: false, message: "OTP expired" };
-
-  try {
-    const verifiedEmail = new VerifiedEmail({ email });
-    await verifiedEmail.save();
-    await EmailVerification.deleteOne({ email });
-
-    return { success: true, message: "OTP is valid ✅. Email verified!", email: record.email };
-  } catch (err) {
-    console.error("❌ Failed to add verified email:", err.message);
-    return { success: false, message: "Failed to store verified email" };
+  if (userIndex === -1) {
+    console.log("❌ OTP not verified: Email not found or OTP expired");
+     return false;
   }
+
+  if (users[userIndex].otp !== otp) {
+    console.log("❌ OTP not verified: Incorrect OTP");
+    return false;
+  }
+
+  console.log("✅ OTP Verified for:", email);
+
+  // 🗑️ Delete the verified user's data
+  const verifiedEmail = users[userIndex].email;
+  users.splice(userIndex, 1);
+  saveUsers(users);
+
+  return {
+    success: true,
+    message: "OTP is valid ✅. Email verified!",
+    email: verifiedEmail
+  };
 };
+
 
 /* ------------------------------------------
    ✅ Exports
 ------------------------------------------ */
-export { connectDB, configureEmail, sendOTP, resendOTP, checkOTP };
+export { configureEmail, sendOTP, checkOTP };
