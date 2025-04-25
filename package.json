@@ -1,0 +1,28 @@
+{
+  "name": "lm-email-otp-verify",
+  "version": "1.0.0",
+  "description": "\"An npm package that help to send Otp and Verify Email \"",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LaganMehtaJi/lm-email-otp-verify.git"
+  },
+  "keywords": [
+    "npm"
+  ],
+  "author": "Lagan Mehta",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/LaganMehtaJi/lm-email-otp-verify/issues"
+  },
+  "homepage": "https://github.com/LaganMehtaJi/lm-email-otp-verify#readme",
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongoose": "^8.13.2",
+    "nodemailer": "^6.10.1"
+  }
+}
