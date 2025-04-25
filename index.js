@@ -2,14 +2,19 @@ import mongoose from 'mongoose';
 import nodemailer from 'nodemailer';
 
 /* ------------------------------------------
-   ✅ MongoDB Connection
+   ✅ MongoDB Connection (Dynamic)
 ------------------------------------------ */
-mongoose.connect("mongodb+srv://user:1234qwer@cluster0.zukfyuo.mongodb.net/emailverify", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('✅'))
-  .catch((err) => console.error('❌', err));
+const connectDB = async (mongoUri) => {
+  try {
+    await mongoose.connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('✅ MongoDB Connected');
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err.message);
+  }
+};
 
 /* ------------------------------------------
    ✅ Schema & Model
@@ -46,8 +51,13 @@ const generateOTP = (length = 6) => {
 /* ------------------------------------------
    ✅ Email Sender
 ------------------------------------------ */
-const hostEmail = "your-email@gmail.com"; // Replace with your real Gmail
-const hostPassword = "your-app-password"; // Use Gmail App Password for security
+let hostEmail = "";
+let hostPassword = "";
+
+const configureEmail = (email, password) => {
+  hostEmail = email;
+  hostPassword = password;
+};
 
 const sendOTPEmail = async ({ to, otp, htmlMessage }) => {
   const defaultHTML = `
@@ -105,7 +115,7 @@ const sendOTP = async (email) => {
    ✅ Resend OTP
 ------------------------------------------ */
 const resendOTP = async (email) => {
-  return await sendOTP(email); // reuses same logic
+  return await sendOTP(email);
 };
 
 /* ------------------------------------------
@@ -118,12 +128,9 @@ const checkOTP = async (email, otp) => {
   if (record.otp !== otp) return { success: false, message: "Invalid OTP" };
   if (record.otpExpiresAt < new Date()) return { success: false, message: "OTP expired" };
 
-  // OTP is valid, add email to the VerifiedEmail schema
   try {
     const verifiedEmail = new VerifiedEmail({ email });
     await verifiedEmail.save();
-
-    // Optionally, delete the OTP record after successful verification
     await EmailVerification.deleteOne({ email });
 
     return { success: true, message: "OTP is valid ✅. Email verified!", email: record.email };
@@ -136,4 +143,4 @@ const checkOTP = async (email, otp) => {
 /* ------------------------------------------
    ✅ Exports
 ------------------------------------------ */
-export { sendOTPEmail, resendOTP, checkOTP };
+export { connectDB, configureEmail, sendOTP, resendOTP, checkOTP };
